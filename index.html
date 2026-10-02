@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ModConvert Mobile</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #101014;
+  color: white;
+}
+
+.app {
+  max-width: 600px;
+  margin: auto;
+  padding: 18px;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 5px;
+}
+
+.subtitle {
+  text-align: center;
+  color: #aaa;
+  margin-bottom: 25px;
+}
+
+.card {
+  background: #19191f;
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 15px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+  color: #ccc;
+}
+
+input[type="file"],
+select,
+button {
+  width: 100%;
+  min-height: 50px;
+  border-radius: 12px;
+  border: 0;
+  font-size: 16px;
+}
+
+input[type="file"] {
+  background: #25252c;
+  color: white;
+  padding: 13px;
+}
+
+select {
+  background: #25252c;
+  color: white;
+  padding: 10px;
+  margin-bottom: 15px;
+}
+
+button {
+  background: #7c3aed;
+  color: white;
+  font-weight: bold;
+  margin-top: 10px;
+}
+
+button:active {
+  transform: scale(.98);
+}
+
+button:disabled {
+  opacity: .5;
+}
+
+.info {
+  background: #222229;
+  padding: 12px;
+  border-radius: 10px;
+  margin-top: 12px;
+  color: #bbb;
+  font-size: 14px;
+}
+
+#log {
+  white-space: pre-wrap;
+  background: #0b0b0e;
+  border-radius: 10px;
+  padding: 12px;
+  min-height: 100px;
+  font-family: monospace;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.success {
+  color: #6ee7b7;
+}
+
+.warning {
+  color: #fbbf24;
+}
+
+.error {
+  color: #f87171;
+}
+</style>
+</head>
+
+<body>
+
+<div class="app">
+
+<h1>ModConvert Mobile</h1>
+<div class="subtitle">Konwerter modów Farming Simulator</div>
+
+<div class="card">
+
+<label>1. Wybierz moda ZIP</label>
+
+<input
+  id="modFile"
+  type="file"
+  accept=".zip,application/zip"
+>
+
+<div id="fileInfo" class="info">
+Nie wybrano pliku.
+</div>
+
+</div>
+
+<div class="card">
+
+<label>2. Wersja źródłowa</label>
+
+<select id="source">
+<option value="19">Farming Simulator 19</option>
+<option value="20">Farming Simulator 20</option>
+<option value="22">Farming Simulator 22</option>
+<option value="23">Farming Simulator 23</option>
+<option value="25">Farming Simulator 25</option>
+</select>
+
+<label>3. Wersja docelowa</label>
+
+<select id="target">
+<option value="20">Farming Simulator 20</option>
+<option value="23">Farming Simulator 23</option>
+<option value="26">Farming Simulator 26</option>
+</select>
+
+<button id="analyze">
+🔎 ANALIZUJ MODA
+</button>
+
+<button id="convert" disabled>
+⚙️ KONWERTUJ MODA
+</button>
+
+</div>
+
+<div class="card">
+
+<label>Log</label>
+
+<div id="log">
+Gotowy.
+</div>
+
+</div>
+
+</div>
+
+<script>
+
+const fileInput = document.getElementById("modFile");
+const source = document.getElementById("source");
+const target = document.getElementById("target");
+const analyzeBtn = document.getElementById("analyze");
+const convertBtn = document.getElementById("convert");
+const fileInfo = document.getElementById("fileInfo");
+const log = document.getElementById("log");
+
+let selectedFile = null;
+let loadedZip = null;
+
+function writeLog(text, type = "") {
+
+  const line = document.createElement("div");
+
+  if (type) {
+    line.className = type;
+  }
+
+  line.textContent = text;
+
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function clearLog() {
+  log.innerHTML = "";
+}
+
+fileInput.addEventListener("change", async function() {
+
+  selectedFile = this.files[0];
+
+  if (!selectedFile) {
+    fileInfo.textContent = "Nie wybrano pliku.";
+    convertBtn.disabled = true;
+    return;
+  }
+
+  fileInfo.innerHTML =
+    "<b>Plik:</b> " +
+    selectedFile.name +
+    "<br><b>Rozmiar:</b> " +
+    (selectedFile.size / 1024 / 1024).toFixed(2) +
+    " MB";
+
+  convertBtn.disabled = true;
+
+  clearLog();
+
+  writeLog("Wybrano: " + selectedFile.name);
+
+  try {
+
+    loadedZip = await JSZip.loadAsync(selectedFile);
+
+    writeLog("ZIP został poprawnie odczytany.", "success");
+
+    convertBtn.disabled = false;
+
+  } catch (e) {
+
+    writeLog("Nie można odczytać pliku ZIP.", "error");
+
+  }
+
+});
+
+analyzeBtn.addEventListener("click", async function() {
+
+  if (!selectedFile || !loadedZip) {
+
+    alert("Najpierw wybierz moda ZIP.");
+
+    return;
+  }
+
+  clearLog();
+
+  writeLog("=== ANALIZA MODA ===");
+
+  const files = Object.keys(loadedZip.files);
+
+  writeLog("Liczba plików: " + files.length);
+
+  let xml = 0;
+  let lua = 0;
+  let i3d = 0;
+  let textures = 0;
+
+  let modDescFound = false;
+
+  for (const file of files) {
+
+    const lower = file.toLowerCase();
+
+    if (lower.endsWith(".xml")) xml++;
+
+    if (lower.endsWith(".lua")) lua++;
+
+    if (lower.endsWith(".i3d")) i3d++;
+
+    if (
+      lower.endsWith(".png") ||
+      lower.endsWith(".jpg") ||
+      lower.endsWith(".jpeg") ||
+      lower.endsWith(".dds")
+    ) {
+      textures++;
+    }
+
+    if (lower.endsWith("moddesc.xml")) {
+      modDescFound = true;
+    }
+
+  }
+
+  writeLog("XML: " + xml);
+  writeLog("I3D: " + i3d);
+  writeLog("Tekstury: " + textures);
+  writeLog("Lua: " + lua);
+
+  if (modDescFound) {
+
+    writeLog("Znaleziono modDesc.xml.", "success");
+
+  } else {
+
+    writeLog(
+      "UWAGA: nie znaleziono modDesc.xml.",
+      "warning"
+    );
+
+  }
+
+  if (lua > 0) {
+
+    writeLog(
+      "UWAGA: mod zawiera skrypty Lua. Mogą wymagać ręcznej konwersji.",
+      "warning"
+    );
+
+  }
+
+  writeLog("");
+  writeLog("Analiza zakończona.", "success");
+
+});
+
+convertBtn.addEventListener("click", async function() {
+
+  if (!selectedFile || !loadedZip) {
+
+    alert("Najpierw wybierz moda.");
+
+    return;
+  }
+
+  clearLog();
+
+  convertBtn.disabled = true;
+
+  writeLog("=== KONWERSJA ===");
+
+  const from = source.value;
+  const to = target.value;
+
+  writeLog(
+    "Źródło: Farming Simulator " + from
+  );
+
+  writeLog(
+    "Cel: Farming Simulator " + to
+  );
+
+  const outputZip = new JSZip();
+
+  const files = Object.keys(loadedZip.files);
+
+  let changedModDesc = false;
+
+  for (const filename of files) {
+
+    const entry = loadedZip.files[filename];
+
+    if (entry.dir) {
+
+      outputZip.folder(filename);
+
+      continue;
+    }
+
+    let data;
+
+    if (
+      filename.toLowerCase().endsWith("moddesc.xml")
+    ) {
+
+      let text = await entry.async("text");
+
+      /*
+       * Podstawowa zmiana descVersion.
+       * Nie gwarantuje pełnej zgodności moda,
+       * ponieważ mobilne wersje FS mają inne wymagania.
+       */
+
+      text = text.replace(
+        /descVersion\s*=\s*["'][^"']*["']/i,
+        'descVersion="' + to + '"'
+      );
+
+      outputZip.file(filename, text);
+
+      changedModDesc = true;
+
+    } else {
+
+      data = await entry.async("uint8array");
+
+      outputZip.file(filename, data);
+
+    }
+
+  }
+
+  if (!changedModDesc) {
+
+    writeLog(
+      "Nie zmieniono modDesc.xml.",
+      "warning"
+    );
+
+  } else {
+
+    writeLog(
+      "Zaktualizowano modDesc.xml.",
+      "success"
+    );
+
+  }
+
+  writeLog("Pakowanie moda...");
+
+  try {
+
+    const blob = await outputZip.generateAsync({
+      type: "blob",
+      compression: "DEFLATE",
+      compressionOptions: {
+        level: 6
+      }
+    });
+
+    const originalName =
+      selectedFile.name.replace(/\.zip$/i, "");
+
+    const outputName =
+      originalName +
+      "_converted_" +
+      to +
+      ".zip";
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const a =
+      document.createElement("a");
+
+    a.href = url;
+    a.download = outputName;
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+    URL.revokeObjectURL(url);
+
+    writeLog("");
+    writeLog(
+      "Gotowe: " + outputName,
+      "success"
+    );
+
+    writeLog(
+      "Plik powinien znaleźć się w folderze Pobrane.",
+      "success"
+    );
+
+  } catch (e) {
+
+    writeLog(
+      "Błąd podczas tworzenia ZIP: " + e.message,
+      "error"
+    );
+
+  }
+
+  convertBtn.disabled = false;
+
+});
+
+</script>
+
+</body>
+</html>
